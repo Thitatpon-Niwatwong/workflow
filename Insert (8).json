@@ -1,0 +1,443 @@
+{
+  "name": "Insert",
+  "nodes": [
+    {
+      "parameters": {
+        "fileSelector": "={{$json.body.pdfFolder}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        272
+      ],
+      "id": "997bd465-286a-4b9f-aba5-87563fbfb189",
+      "name": "Read/Write Files from Disk",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "EQrK4Gri1hVk5blH",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/EQrK4Gri1hVk5blH",
+          "cachedResultName": "parallel sub workflow"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -208,
+        544
+      ],
+      "name": "Call My Sub-workflow",
+      "id": "c5a57131-02e7-4839-97bf-eba3577f17a5",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -560,
+        544
+      ],
+      "id": "f361b132-5c7c-4b15-ab6d-f7a83876ae8d",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -384,
+        544
+      ],
+      "id": "7a5d2978-1663-4208-8cbb-b10be870850b",
+      "name": "Wait",
+      "webhookId": "7a68008a-d8de-421f-8bcd-e95cfb2162cc"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "insert",
+        "responseMode": "lastNode",
+        "options": {
+          "rawBody": "={{ true }}"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1424,
+        272
+      ],
+      "id": "3164234a-fe34-4c03-abdf-ea1b81239b89",
+      "name": "Webhook",
+      "webhookId": "ecb7626f-8968-4654-be8f-555b9f7f12f7"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const bin = item.binary?.data; \n\n  const directory = bin?.directory || \"\";\n  const fileName  = bin?.fileName  || \"\";\n\n  return {\n    json: {\n      fileName,\n      directory,\n      // full path รวมชื่อไฟล์ด้วย\n      path: directory\n        ? `${directory}/${fileName}`\n        : fileName\n    },\n    binary: item.binary   \n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        272
+      ],
+      "id": "8f32caa7-4f54-4381-abbe-a6e40a3873c5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// ดึงชื่อโฟลเดอร์สุดท้าย เช่น \"ก\", \"ข\", \"สยามบียู\"\nconst folder = items[0].json.directory.split('/').pop();\n\n// normalize unicode ให้คงที่\nconst normalized = folder.normalize(\"NFC\");\n\n// hash สำหรับ schema\nconst schema = 's_' + Buffer.from(normalized).toString('hex').slice(0, 16);\n\n// คืนค่าพร้อมข้อมูลเดิมทุก item + binary เดิม\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    schema,\n  },\n  binary: item.binary,\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        272
+      ],
+      "id": "77208896-e824-44d1-8632-609a1ab2f1df",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.vat_companies (\n    id SERIAL PRIMARY KEY,\n\n    vat_id TEXT NOT NULL,\n    branch TEXT NOT NULL,\n\n    company_name TEXT,\n    address      TEXT,\n\n    created_at TIMESTAMP DEFAULT NOW(),\n    updated_at TIMESTAMP DEFAULT NOW(),\n\n    CONSTRAINT vat_company_unique UNIQUE (vat_id, branch)\n);\n\nCREATE TABLE IF NOT EXISTS public.workflow_errors (\n    id SERIAL PRIMARY KEY,\n    timestamp TIMESTAMP,\n    workflow_name TEXT,\n    workflow_id TEXT,\n    execution_id TEXT,\n    execution_url TEXT,\n    last_node TEXT,\n    error_message TEXT,\n    error_stack TEXT\n);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -576,
+        -176
+      ],
+      "id": "29c33c80-199c-48e0-af1a-cffad693da07",
+      "name": "Create Companies Table",
+      "credentials": {
+        "postgres": {
+          "id": "59xvxQayjivgQ1fN",
+          "name": "Postgres account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- 1) สร้าง schema จาก expression (sanitize ให้เป็นชื่อที่ PostgreSQL ใช้ได้)\nCREATE SCHEMA IF NOT EXISTS {{\n  $json.schema\n    .toLowerCase()\n    .replace(/[^a-zA-Z0-9_]/g, '_')\n}};\n\n-- 2) ตาราง invoices: เก็บ \"ข้อมูลจริง\" ของใบกำกับภาษี\nCREATE TABLE IF NOT EXISTS {{\n  $json.schema\n    .toLowerCase()\n    .replace(/[^a-zA-Z0-9_]/g, '_')\n}}.invoices (\n    id SERIAL PRIMARY KEY,\n\n    invoice_number   TEXT,\n    date_raw         TEXT,\n    doc_title        TEXT,\n\n    vendor_name      TEXT,\n    vendor_vat_id    TEXT,\n    vendor_branch    TEXT,\n\n    net_amount       NUMERIC(15,2),\n    vat_amount       NUMERIC(15,2),\n    grand_total      NUMERIC(15,2),\n\n    name             TEXT UNIQUE,\n    path             TEXT UNIQUE,\n\n    -- กันข้อมูลซ้ำ (invoice_number + vat_id + branch)\n    CONSTRAINT invoices_unique_triplet\n      UNIQUE (invoice_number, vendor_vat_id, vendor_branch),\n\n    created_at       TIMESTAMP DEFAULT NOW()\n);\n\n\n\n-- 3) ตารางสรุปผลตรวจสอบ / เปรียบเทียบ (true/false summary)\nCREATE TABLE IF NOT EXISTS {{\n  $json.schema\n    .toLowerCase()\n    .replace(/[^a-zA-Z0-9_]/g, '_')\n}}.invoice_check_summary (\n    id SERIAL PRIMARY KEY,\n\n    -- เชื่อมกับ invoices และลบตามเมื่อ invoices ถูกลบ\n    invoice_id INT REFERENCES {{\n      $json.schema\n        .toLowerCase()\n        .replace(/[^a-zA-Z0-9_]/g, '_')\n    }}.invoices(id) ON DELETE CASCADE,\n\n    -- composite key ใช้สำหรับ upsert\n    invoice_number   TEXT NOT NULL,\n    vendor_vat_id    TEXT NOT NULL,\n    vendor_branch    TEXT NOT NULL,\n\n    -- boolean flags ของแต่ละ field\n    invoice_status            BOOLEAN,\n    buyer_vat_info_status     BOOLEAN,\n    invoice_number_status     BOOLEAN,\n    date_raw_status           BOOLEAN,\n    vendor_name_status        BOOLEAN,\n    vendor_vat_id_status      BOOLEAN,\n    vendor_vat_id_info_status BOOLEAN,\n    vendor_branch_status      BOOLEAN,\n    net_amount_status         BOOLEAN,\n    vat_amount_status         BOOLEAN,\n    grand_total_status        BOOLEAN,\n\n    -- presence flags\n    missing_in_pdf     BOOLEAN,\n    missing_in_excel   BOOLEAN,\n\n    -- summary\n    all_ok             BOOLEAN,\n\n    updated_at         TIMESTAMP DEFAULT NOW(),\n\n    -- unique constraint ป้องกันข้อมูลซ้ำ\n    CONSTRAINT uq_invoice_check_summary\n        UNIQUE (invoice_number, vendor_vat_id, vendor_branch)\n);\n\n-- 4) ตารางเหตุผลละเอียด: แถวละ field + เหตุผล\nCREATE TABLE IF NOT EXISTS {{\n  $json.schema\n    .toLowerCase()\n    .replace(/[^a-zA-Z0-9_]/g, '_')\n}}.invoice_check_reasons (\n    id SERIAL PRIMARY KEY,\n\n    -- ผูกกับแถวใน summary (ลบ summary แล้วให้ reasons หายตาม)\n    check_id INT REFERENCES {{\n      $json.schema\n        .toLowerCase()\n        .replace(/[^a-zA-Z0-9_]/g, '_')\n    }}.invoice_check_summary(id) ON DELETE CASCADE,\n\n    -- field ไหนที่ตรวจ (เช่น 'invoice_number', 'net_amount', 'vendor_name')\n    field_name   TEXT,\n\n    -- สถานะของ field นั้น (true = ผ่าน, false = ไม่ผ่าน)\n    status BOOLEAN NOT NULL,\n\n    -- ให้ reasons table เก็บเฉพาะกรณีไม่ผ่านเท่านั้น\n    CONSTRAINT reasons_only_for_false CHECK (status = FALSE),\n  \n    -- ข้อความอธิบายแบบอ่านง่าย\n    message      TEXT,\n\n    -- ค่าเปรียบเทียบ (optional)\n    expected_value TEXT,    -- ค่าที่ควรจะเป็น (เช่น จาก DB)\n    actual_value   TEXT,    -- ค่าที่เจอ (เช่น จาก Excel/LLM)\n\n    created_at   TIMESTAMP DEFAULT NOW()\n);\n\n-- 5) ตารางใหม่สำหรับ Excel (\"รายงานภาษีซื้อ\")\nCREATE TABLE IF NOT EXISTS {{\n  $json.schema\n    .toLowerCase()\n    .replace(/[^a-zA-Z0-9_]/g, '_')\n}}.excel_purchase_tax (\n    id SERIAL PRIMARY KEY,\n\n    invoice_number   TEXT,\n    date_raw         TEXT,\n    doc_title        TEXT,\n    vendor_name      TEXT,\n    vendor_vat_id    TEXT,\n    vendor_branch    TEXT,\n\n    net_amount       NUMERIC(15,2),\n    vat_amount       NUMERIC(15,2),\n    grand_total      NUMERIC(15,2),\n\n    created_at       TIMESTAMP DEFAULT NOW()\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -576,
+        48
+      ],
+      "id": "6d4c4714-733f-493e-9f74-da217dc9a4f6",
+      "name": "Create Schema For Company",
+      "credentials": {
+        "postgres": {
+          "id": "59xvxQayjivgQ1fN",
+          "name": "Postgres account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "={{ $json.schema }}",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "invoices",
+          "mode": "list",
+          "cachedResultName": "invoices"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.fileName }}",
+            "path": "={{ $json.path }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date_raw",
+              "displayName": "date_raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vendor_name",
+              "displayName": "vendor_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vendor_vat_id",
+              "displayName": "vendor_vat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vendor_branch",
+              "displayName": "vendor_branch",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "net_amount",
+              "displayName": "net_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vat_amount",
+              "displayName": "vat_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "grand_total",
+              "displayName": "grand_total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "skipOnConflict": "={{ true }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -576,
+        272
+      ],
+      "id": "e4236bcd-7134-4dca-9818-128a8fb392c2",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "59xvxQayjivgQ1fN",
+          "name": "Postgres account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call My Sub-workflow": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Call My Sub-workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Create Schema For Company",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Companies Table",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "diOAConKTESzIqzi"
+  },
+  "versionId": "05134b29-0499-40bd-a79a-0488ce3eb369",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e25b4f0a8e6c0a7984427a0067c1260671f4803f14e4886f5e01dffd5ca1629c"
+  },
+  "id": "o03zVvw5oYeUQt7S",
+  "tags": []
+}

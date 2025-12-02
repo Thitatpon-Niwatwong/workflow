@@ -1,0 +1,967 @@
+{
+  "name": "RD Vender VAT Lookup",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1728,
+        -96
+      ],
+      "id": "0a5fcd2e-9867-4365-8e44-0dddbf72c408",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -528,
+        112
+      ],
+      "id": "2e72a491-8fdd-43ee-bb38-33c1ec31584d",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c9d6ce2b-df45-41bd-9c7d-a6dee8461a89",
+              "leftValue": "={{ $json.errorMessage.anyType._ }}",
+              "rightValue": "is empty",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -304,
+        112
+      ],
+      "id": "3b513d8b-e21e-4a22-804f-c4e5b14f28d6",
+      "name": "If1",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -336,
+        -320
+      ],
+      "id": "6a057bf9-c024-45da-83fe-9a3fd687f8d6",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c9d6ce2b-df45-41bd-9c7d-a6dee8461a89",
+              "leftValue": "={{ $json.errorMessage.anyType._ }}",
+              "rightValue": "is empty",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        -384
+      ],
+      "id": "40d83e71-7fcc-4c32-91f7-0c8165b8d887",
+      "name": "If2",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://rdws.rd.go.th/serviceRD3/vatserviceRD3.asmx",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/soap+xml; charset=utf-8",
+        "body": "=<soap:Envelope\n    xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"\n    xmlns:vat=\"https://rdws.rd.go.th/serviceRD3/vatserviceRD3\">\n\n  <soap:Header/>\n\n  <soap:Body>\n\n    <!-- ===== ตรวจผู้ขาย (Vendor) ===== -->\n    <vat:Service>\n      <vat:TIN>{{ $json.vendor_vat_id }}</vat:TIN>\n      <vat:ProvinceCode>0</vat:ProvinceCode>\n      <vat:BranchNumber>{{ $json.vendor_branch }}</vat:BranchNumber>\n      <vat:AmphurCode>0</vat:AmphurCode>\n    </vat:Service>\n\n  </soap:Body>\n\n</soap:Envelope>\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1520,
+        -96
+      ],
+      "id": "4dcdd924-6240-4aeb-a5cc-48621282ba96",
+      "name": "VAT INFO"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        -1328,
+        -96
+      ],
+      "id": "6eed0e9a-2a2e-4813-9a30-56b296764f0f",
+      "name": "XML to JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🟡 1) ดึงข้อมูลจาก input ของ n8n มาทำเป็นตัวแปร data (array เสมอ)\nconst allItems = $input.all();\nlet data;\n\n// กรณี 1: มี item เดียว แล้วใน item.json เป็น array อยู่แล้ว (เหมือนตัวอย่างที่คุณแปะมา)\nif (allItems.length === 1 && Array.isArray(allItems[0].json)) {\n  data = allItems[0].json;\n} else {\n  // กรณี 2: มีหลาย item แต่ละ item.json เป็น object ทีละตัว\n  data = allItems.map(i => i.json);\n}\n\n// 🟡 2) ฟังก์ชันแปลง RD VAT Result เหมือนเดิม\nfunction transformRdVatResult(data) {\n  return data.map(item => {\n    const sr =\n      item?.[\"soap:Envelope\"]?.[\"soap:Body\"]?.ServiceResponse?.ServiceResult ?? {};\n\n    // helper: ดึงค่าออกมาจากโครงสร้าง anyType / _\n    const get = (field) => {\n      const v = sr[field];\n      if (v == null) return \"\";\n      if (typeof v === \"string\" || typeof v === \"number\") return String(v);\n\n      if (v.anyType) {\n        const a = v.anyType;\n        if (typeof a === \"string\" || typeof a === \"number\") return String(a);\n        if (a && typeof a._ !== \"undefined\") return String(a._);\n      }\n\n      if (typeof v._ !== \"undefined\") return String(v._);\n      return \"\";\n    };\n\n    // helper: แปลง \"-\" หรือช่องว่างให้เป็น \"\"\n    const clean = (s) => {\n      const x = String(s ?? \"\").trim();\n      return x === \"-\" ? \"\" : x;\n    };\n\n    const vatId = get(\"vNID\");\n\n    // branch number: 0 = สำนักงานใหญ่ → 00000\n    const branchRaw = get(\"vBranchNumber\");\n    const branchNumber = branchRaw === \"0\"\n      ? \"00000\"\n      : branchRaw.padStart(5, \"0\");\n    const branchLabel = branchNumber === \"00000\"\n      ? \"สำนักงานใหญ่\"\n      : `สาขา ${branchNumber}`;\n\n    const titleName = clean(get(\"vtitleName\"));\n    const companyNameMain = clean(get(\"vName\"));\n\n    return {\n      vatId,                                              // เลขผู้เสียภาษี\n      companyName: (titleName + \" \" + companyNameMain).trim(),\n      branch: {\n        branchNumber,\n        branchLabel,\n        branchName: clean(get(\"vBranchName\")),\n      },\n      address: {\n        houseNo: clean(get(\"vHouseNumber\")),\n        moo: clean(get(\"vMooNumber\")),\n        village: clean(get(\"vVillageName\")),\n        building: clean(get(\"vBuildingName\")),\n        floor: clean(get(\"vFloorNumber\")),\n        room: clean(get(\"vRoomNumber\")),\n        soi: clean(get(\"vSoiName\")),\n        street: clean(get(\"vStreetName\")),\n        subDistrict: clean(get(\"vThambol\")),\n        district: clean(get(\"vAmphur\")),\n        province: clean(get(\"vProvince\")),\n        postcode: clean(get(\"vPostCode\")),\n        yaek: clean(get(\"vYaek\")),\n      },\n      businessFirstDate: clean(get(\"vBusinessFirstDate\")),\n      errorMessage: sr.vmsgerr ?? \"\",\n    };\n  });\n}\n\n// 🟡 3) เรียกฟังก์ชันแปลง\nconst pretty = transformRdVatResult(data);\n\n// 🟡 4) คืนค่าในรูปแบบที่ n8n ต้องการ\nreturn pretty.map((row, index) => ({\n  json: row,\n  pairedItem: { item: index },\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        -96
+      ],
+      "id": "f8b8aab9-e3e4-47fd-947e-379ae619c125",
+      "name": "Norm: JSON"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c9d6ce2b-df45-41bd-9c7d-a6dee8461a89",
+              "leftValue": "={{ $json.errorMessage.anyType._ }}",
+              "rightValue": "is empty",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -752,
+        -96
+      ],
+      "id": "ad7214b3-b93e-49a9-a9dd-b8a708f72b58",
+      "name": "If found vat info",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code Node (JavaScript)\n\n// ดึงทุก item จาก input\nconst items = $input.all();\n\n/**\n * สร้างที่อยู่แบบข้อความยาว (raw address) จาก object address\n */\nfunction buildRawAddress(address) {\n  if (!address) return \"\";\n\n  const parts = [];\n\n  // เลขที่บ้าน\n  if (address.houseNo) parts.push(address.houseNo);\n\n  // หมู่\n  if (address.moo) parts.push(\"หมู่ \" + address.moo);\n\n  // หมู่บ้าน\n  if (address.village) parts.push(\"หมู่บ้าน\" + address.village);\n\n  // อาคาร / ชั้น / ห้อง\n  if (address.building) parts.push(\"อาคาร\" + address.building);\n  if (address.floor) parts.push(\"ชั้น \" + address.floor);\n  if (address.room) parts.push(\"ห้อง \" + address.room);\n\n  // ซอย / แยก / ถนน\n  if (address.soi) parts.push(\"ซ.\" + address.soi);\n  if (address.yaek) parts.push(\"แยก \" + address.yaek);\n  if (address.street) parts.push(\"ถ.\" + address.street);\n\n  // แขวง/เขต หรือ ต./อ. (ถ้าไม่ใช่กรุงเทพ)\n  const province = address.province || \"\";\n  const isBangkok = /กรุงเทพมหานคร/.test(province);\n\n  if (address.subDistrict) {\n    parts.push((isBangkok ? \"แขวง \" : \"ต.\") + address.subDistrict);\n  }\n\n  if (address.district) {\n    parts.push((isBangkok ? \"เขต \" : \"อ.\") + address.district);\n  }\n\n  // จังหวัด\n  if (province) {\n    if (isBangkok) {\n      // กรุงเทพมหานคร ไม่ต้องใส่ \"จ.\"\n      parts.push(province);\n    } else {\n      // จังหวัดทั่วไป → เติม \"จ.\"\n      parts.push(\"จ.\" + province);\n    }\n  }\n\n  // รหัสไปรษณีย์\n  if (address.postcode) parts.push(address.postcode);\n\n  // join และเก็บช่องว่างให้เรียบร้อย\n  return parts.join(\" \").replace(/\\s+/g, \" \").trim();\n}\n\n// แปลงทุก item แล้วเพิ่ม field address_raw\nreturn items.map(item => {\n  const data = item.json;\n  const address = data.address || null;\n\n  const raw = buildRawAddress(address);\n\n  return {\n    json: {\n      ...data,\n      address_raw: raw,  // 👉 ที่อยู่แบบ raw address พร้อม \"จ.จังหวัด\"\n    },\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        -96
+      ],
+      "id": "6e753502-3a06-4928-a7db-4f70a717f2bf",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "vat_companies",
+          "mode": "list",
+          "cachedResultName": "vat_companies"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "vat_id": "={{ $json.vatId }}",
+            "address": "={{ $json.address_raw }}",
+            "company_name": "={{ $json.companyName }}",
+            "branch": "={{ $json.branch.branchNumber }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vat_id",
+              "displayName": "vat_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company_name",
+              "displayName": "company_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "branch",
+              "displayName": "branch",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "address",
+              "displayName": "address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "skipOnConflict": "={{ true }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -528,
+        -224
+      ],
+      "id": "4d3d6172-7577-424f-8f37-7a4105b6343c",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "59xvxQayjivgQ1fN",
+          "name": "Postgres account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "={{ $json.schema }}",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "invoice_check_summary",
+          "mode": "list",
+          "cachedResultName": "invoice_check_summary"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "invoice_number": "={{ $json.invoice_number }}",
+            "vendor_vat_id_info_status": "={{ true }}"
+          },
+          "matchingColumns": [
+            "invoice_number"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_id",
+              "displayName": "invoice_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vendor_vat_id",
+              "displayName": "vendor_vat_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_branch",
+              "displayName": "vendor_branch",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_status",
+              "displayName": "invoice_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "buyer_vat_info_status",
+              "displayName": "buyer_vat_info_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_number_status",
+              "displayName": "invoice_number_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "date_raw_status",
+              "displayName": "date_raw_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_name_status",
+              "displayName": "vendor_name_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_vat_id_status",
+              "displayName": "vendor_vat_id_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_branch_status",
+              "displayName": "vendor_branch_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "net_amount_status",
+              "displayName": "net_amount_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vat_amount_status",
+              "displayName": "vat_amount_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "grand_total_status",
+              "displayName": "grand_total_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "missing_in_pdf",
+              "displayName": "missing_in_pdf",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "missing_in_excel",
+              "displayName": "missing_in_excel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "all_ok",
+              "displayName": "all_ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor_vat_id_info_status",
+              "displayName": "vendor_vat_id_info_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        64,
+        -480
+      ],
+      "id": "925e4f6e-f82f-4cf3-86d1-2cfc9d44b5af",
+      "name": "Update rows in a table5",
+      "credentials": {
+        "postgres": {
+          "id": "59xvxQayjivgQ1fN",
+          "name": "Postgres account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "={{ $json.schema }}",
+          "mode": "name"
+        },
+        "table": {
+          "__rl": true,
+          "value": "invoice_check_summary",
+          "mode": "list",
+          "cachedResultName": "invoice_check_summary"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "invoice_number": "={{ $json.invoice_number }}",
+            "vendor_vat_id_info_status": "={{ false }}"
+          },
+          "matchingColumns": [
+            "invoice_number"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_id",
+              "displayName": "invoice_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vendor_vat_id",
+              "displayName": "vendor_vat_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_branch",
+              "displayName": "vendor_branch",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_status",
+              "displayName": "invoice_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "buyer_vat_info_status",
+              "displayName": "buyer_vat_info_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invoice_number_status",
+              "displayName": "invoice_number_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "date_raw_status",
+              "displayName": "date_raw_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_name_status",
+              "displayName": "vendor_name_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_vat_id_status",
+              "displayName": "vendor_vat_id_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vendor_branch_status",
+              "displayName": "vendor_branch_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "net_amount_status",
+              "displayName": "net_amount_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "vat_amount_status",
+              "displayName": "vat_amount_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "grand_total_status",
+              "displayName": "grand_total_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "missing_in_pdf",
+              "displayName": "missing_in_pdf",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "missing_in_excel",
+              "displayName": "missing_in_excel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "all_ok",
+              "displayName": "all_ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor_vat_id_info_status",
+              "displayName": "vendor_vat_id_info_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -48,
+        192
+      ],
+      "id": "285c5363-e7d9-4935-a994-c2fdfbb12c73",
+      "name": "Update rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "59xvxQayjivgQ1fN",
+          "name": "Postgres account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "VAT INFO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Update rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Update rows in a table5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VAT INFO": {
+      "main": [
+        [
+          {
+            "node": "XML to JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XML to JSON": {
+      "main": [
+        [
+          {
+            "node": "Norm: JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Norm: JSON": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If found vat info": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If found vat info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "diOAConKTESzIqzi"
+  },
+  "versionId": "52ad3750-8076-470a-a4fc-ff0e24a1a304",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e25b4f0a8e6c0a7984427a0067c1260671f4803f14e4886f5e01dffd5ca1629c"
+  },
+  "id": "pEZ6RDmpdq9p5KH2",
+  "tags": []
+}
