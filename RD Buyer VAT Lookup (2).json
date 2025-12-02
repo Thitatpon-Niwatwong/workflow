@@ -18,7 +18,7 @@
         -48
       ],
       "id": "f67d6e92-828a-41f1-9c18-c66f05ba7fad",
-      "name": "VAT INFO1",
+      "name": "HTTP: RD VAT lookup (buyer)",
       "continueOnFail": true
     },
     {
@@ -32,7 +32,7 @@
         -48
       ],
       "id": "c1080fef-b012-4e3c-9d1c-15f15aad1459",
-      "name": "XML to JSON1",
+      "name": "XML to JSON (RD)",
       "continueOnFail": true
     },
     {
@@ -46,7 +46,7 @@
         -48
       ],
       "id": "06f0af7a-ad94-4341-80fd-3e1411935c2f",
-      "name": "Norm: JSON1"
+      "name": "Normalize RD response (buyer)"
     },
     {
       "parameters": {
@@ -61,7 +61,7 @@
         160
       ],
       "id": "95cde4bd-a55a-4361-8dd4-7095c6514007",
-      "name": "Merge2"
+      "name": "Merge: caller + RD response"
     },
     {
       "parameters": {
@@ -75,7 +75,7 @@
           "conditions": [
             {
               "id": "c9d6ce2b-df45-41bd-9c7d-a6dee8461a89",
-              "leftValue": "={{ $json.success }}",
+              "leftValue": "={{ $json.success === false }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -95,7 +95,7 @@
         160
       ],
       "id": "57382c76-edab-4066-808e-8073f6988e52",
-      "name": "If",
+      "name": "Branch: RD lookup failed",
       "alwaysOutputData": false
     },
     {
@@ -130,7 +130,7 @@
         -48
       ],
       "id": "545977d9-6166-459f-a202-4d7d9d2a342f",
-      "name": "If found vat info2",
+      "name": "Branch: RD lookup success",
       "alwaysOutputData": false
     },
     {
@@ -144,7 +144,7 @@
         -48
       ],
       "id": "bea01b83-298e-44ac-9886-61c15e772f33",
-      "name": "When Executed by Another Workflow"
+      "name": "Trigger: Called by workflow"
     },
     {
       "parameters": {
@@ -250,7 +250,7 @@
         -400
       ],
       "id": "bee1243c-806f-4d8c-a274-4f48a0c952bc",
-      "name": "Insert rows in a table",
+      "name": "Upsert VAT company (buyer)",
       "credentials": {
         "postgres": {
           "id": "59xvxQayjivgQ1fN",
@@ -269,7 +269,7 @@
         -48
       ],
       "id": "1f786dee-4840-48ee-ad96-537ee6fd30c3",
-      "name": "Code in JavaScript"
+      "name": "Build RD address_raw"
     },
     {
       "parameters": {
@@ -486,7 +486,7 @@
         -272
       ],
       "id": "3b0a3022-80ab-424e-9181-0f8ff8a103f9",
-      "name": "Update rows in a table6",
+      "name": "Mark buyer_vat_info_status=true",
       "credentials": {
         "postgres": {
           "id": "59xvxQayjivgQ1fN",
@@ -709,7 +709,7 @@
         192
       ],
       "id": "9c9476c7-b28e-45df-b35d-ffa9212b7aad",
-      "name": "Update rows in a table",
+      "name": "Mark buyer_vat_info_status=false",
       "credentials": {
         "postgres": {
           "id": "59xvxQayjivgQ1fN",
@@ -728,7 +728,7 @@
         -144
       ],
       "id": "7eeae83c-fffb-4204-8ecb-fdf7e4d1dc43",
-      "name": "Code in JavaScript1"
+      "name": "Compare buyer address vs RD"
     },
     {
       "parameters": {},
@@ -739,7 +739,7 @@
         -144
       ],
       "id": "8735be7b-beb2-4fb8-9b54-295af3ff78dc",
-      "name": "Merge"
+      "name": "Merge: success payload + caller"
     },
     {
       "parameters": {
@@ -773,7 +773,7 @@
         -144
       ],
       "id": "0d7c9641-e28f-4fd3-b367-21d8c75ab5cf",
-      "name": "If1"
+      "name": "Branch: buyer address matches"
     },
     {
       "parameters": {
@@ -990,7 +990,7 @@
         -48
       ],
       "id": "1e3715be-e5e4-48eb-95d4-bbbe0fde7d03",
-      "name": "Update rows in a table7",
+      "name": "Mark buyer_address_status=false",
       "credentials": {
         "postgres": {
           "id": "59xvxQayjivgQ1fN",
@@ -1047,14 +1047,14 @@
     },
     "If": {
       "main": [
-        [],
         [
           {
             "node": "Update rows in a table",
             "type": "main",
             "index": 0
           }
-        ]
+        ],
+        []
       ]
     },
     "If found vat info2": {

@@ -15,7 +15,7 @@
     {
       "parameters": {
         "mode": "raw",
-        "jsonOutput": "={{\n{\n  \"workflow_name\": $json.workflow.name,\n  \"workflow_id\": $json.workflow.id,\n  \"execution_id\": $json.execution.id,\n  \"execution_url\": $json.execution.url,\n  \"last_node\": $json.execution.lastNodeExecuted,\n  \"error_message\": $json.execution.error ? $json.execution.error.message : \"No error\",\n  \"error_stack\": $json.execution.error ? $json.execution.error.stack : null,\n  \"timestamp\": new Date().toISOString()\n}\n}}",
+        "jsonOutput": "={{\n(() => {\n  const wf = $json.workflow || {};\n  const ex = $json.execution || {};\n  const err = ex.error || {};\n  return {\n    workflow_name: wf.name || null,\n    workflow_id: wf.id || null,\n    execution_id: ex.id || null,\n    execution_url: ex.url || null,\n    last_node: ex.lastNodeExecuted || null,\n    error_message: err.message || 'No error',\n    error_stack: err.stack || null,\n    mode: ex.mode || null,\n    retry_of: ex.retryOf || null,\n    timestamp: new Date().toISOString(),\n  };\n})()\n}}",
         "options": {}
       },
       "type": "n8n-nodes-base.set",
@@ -25,7 +25,7 @@
         0
       ],
       "id": "64dafe3d-729a-4788-b51d-85541c380a87",
-      "name": "Edit Fields"
+      "name": "Build error record"
     },
     {
       "parameters": {
@@ -151,13 +151,14 @@
         0
       ],
       "id": "7a40b8fa-4a74-445c-b168-4b28c4539e45",
-      "name": "Insert rows in a table",
+      "name": "Log error to DB",
       "credentials": {
         "postgres": {
           "id": "59xvxQayjivgQ1fN",
           "name": "Postgres account 3"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {
