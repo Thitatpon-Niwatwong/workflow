@@ -41,11 +41,11 @@
           "conditions": [
             {
               "id": "c9d6ce2b-df45-41bd-9c7d-a6dee8461a89",
-              "leftValue": "={{ $json.errorMessage.anyType._ }}",
-              "rightValue": "is empty",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
               "operator": {
-                "type": "string",
-                "operation": "empty",
+                "type": "boolean",
+                "operation": "true",
                 "singleValue": true
               }
             }
@@ -91,11 +91,11 @@
           "conditions": [
             {
               "id": "c9d6ce2b-df45-41bd-9c7d-a6dee8461a89",
-              "leftValue": "={{ $json.errorMessage.anyType._ }}",
-              "rightValue": "is empty",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
               "operator": {
-                "type": "string",
-                "operation": "empty",
+                "type": "boolean",
+                "operation": "true",
                 "singleValue": true
               }
             }
@@ -131,7 +131,8 @@
         -96
       ],
       "id": "4dcdd924-6240-4aeb-a5cc-48621282ba96",
-      "name": "VAT INFO"
+      "name": "VAT INFO",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -144,11 +145,12 @@
         -96
       ],
       "id": "6eed0e9a-2a2e-4813-9a30-56b296764f0f",
-      "name": "XML to JSON"
+      "name": "XML to JSON",
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "// 🟡 1) ดึงข้อมูลจาก input ของ n8n มาทำเป็นตัวแปร data (array เสมอ)\nconst allItems = $input.all();\nlet data;\n\n// กรณี 1: มี item เดียว แล้วใน item.json เป็น array อยู่แล้ว (เหมือนตัวอย่างที่คุณแปะมา)\nif (allItems.length === 1 && Array.isArray(allItems[0].json)) {\n  data = allItems[0].json;\n} else {\n  // กรณี 2: มีหลาย item แต่ละ item.json เป็น object ทีละตัว\n  data = allItems.map(i => i.json);\n}\n\n// 🟡 2) ฟังก์ชันแปลง RD VAT Result เหมือนเดิม\nfunction transformRdVatResult(data) {\n  return data.map(item => {\n    const sr =\n      item?.[\"soap:Envelope\"]?.[\"soap:Body\"]?.ServiceResponse?.ServiceResult ?? {};\n\n    // helper: ดึงค่าออกมาจากโครงสร้าง anyType / _\n    const get = (field) => {\n      const v = sr[field];\n      if (v == null) return \"\";\n      if (typeof v === \"string\" || typeof v === \"number\") return String(v);\n\n      if (v.anyType) {\n        const a = v.anyType;\n        if (typeof a === \"string\" || typeof a === \"number\") return String(a);\n        if (a && typeof a._ !== \"undefined\") return String(a._);\n      }\n\n      if (typeof v._ !== \"undefined\") return String(v._);\n      return \"\";\n    };\n\n    // helper: แปลง \"-\" หรือช่องว่างให้เป็น \"\"\n    const clean = (s) => {\n      const x = String(s ?? \"\").trim();\n      return x === \"-\" ? \"\" : x;\n    };\n\n    const vatId = get(\"vNID\");\n\n    // branch number: 0 = สำนักงานใหญ่ → 00000\n    const branchRaw = get(\"vBranchNumber\");\n    const branchNumber = branchRaw === \"0\"\n      ? \"00000\"\n      : branchRaw.padStart(5, \"0\");\n    const branchLabel = branchNumber === \"00000\"\n      ? \"สำนักงานใหญ่\"\n      : `สาขา ${branchNumber}`;\n\n    const titleName = clean(get(\"vtitleName\"));\n    const companyNameMain = clean(get(\"vName\"));\n\n    return {\n      vatId,                                              // เลขผู้เสียภาษี\n      companyName: (titleName + \" \" + companyNameMain).trim(),\n      branch: {\n        branchNumber,\n        branchLabel,\n        branchName: clean(get(\"vBranchName\")),\n      },\n      address: {\n        houseNo: clean(get(\"vHouseNumber\")),\n        moo: clean(get(\"vMooNumber\")),\n        village: clean(get(\"vVillageName\")),\n        building: clean(get(\"vBuildingName\")),\n        floor: clean(get(\"vFloorNumber\")),\n        room: clean(get(\"vRoomNumber\")),\n        soi: clean(get(\"vSoiName\")),\n        street: clean(get(\"vStreetName\")),\n        subDistrict: clean(get(\"vThambol\")),\n        district: clean(get(\"vAmphur\")),\n        province: clean(get(\"vProvince\")),\n        postcode: clean(get(\"vPostCode\")),\n        yaek: clean(get(\"vYaek\")),\n      },\n      businessFirstDate: clean(get(\"vBusinessFirstDate\")),\n      errorMessage: sr.vmsgerr ?? \"\",\n    };\n  });\n}\n\n// 🟡 3) เรียกฟังก์ชันแปลง\nconst pretty = transformRdVatResult(data);\n\n// 🟡 4) คืนค่าในรูปแบบที่ n8n ต้องการ\nreturn pretty.map((row, index) => ({\n  json: row,\n  pairedItem: { item: index },\n}));"
+        "jsCode": "// Normalize RD VAT SOAP response with error handling\nconst allItems = $input.all();\nconst data = Array.isArray(allItems[0]?.json) ? allItems[0].json : allItems.map(i => i.json ?? {});\n\nfunction clean(val) {\n  const x = String(val ?? '').trim();\n  return x === '-' ? '' : x;\n}\n\nfunction getField(obj, field) {\n  const sr = obj?.[\"soap:Envelope\"]?.[\"soap:Body\"]?.ServiceResponse?.ServiceResult ?? {};\n  const v = sr[field];\n  if (v == null) return '';\n  if (typeof v === 'string' || typeof v === 'number') return String(v);\n  if (v.anyType !== undefined) {\n    const a = v.anyType;\n    if (typeof a === 'string' || typeof a === 'number') return String(a);\n    if (a && typeof a._ !== 'undefined') return String(a._);\n  }\n  if (typeof v._ !== 'undefined') return String(v._);\n  return '';\n}\n\nfunction parseError(obj) {\n  const sr = obj?.[\"soap:Envelope\"]?.[\"soap:Body\"]?.ServiceResponse?.ServiceResult ?? {};\n  return clean(sr.vmsgerr ?? obj.errorMessage ?? obj.error?.message ?? '');\n}\n\nconst out = [];\n\ndata.forEach((item, index) => {\n  const errMsg = parseError(item);\n  const vatId = clean(getField(item, 'vNID'));\n\n  const branchRaw = clean(getField(item, 'vBranchNumber'));\n  const branchNumber = branchRaw === '0' || branchRaw === '' ? '00000' : branchRaw.padStart(5, '0');\n  const branchLabel = branchNumber === '00000' ? '????????????' : `???? ${branchNumber}`;\n\n  const titleName = clean(getField(item, 'vtitleName'));\n  const companyNameMain = clean(getField(item, 'vName'));\n\n  out.push({\n    json: {\n      vatId,\n      companyName: `${titleName} ${companyNameMain}`.trim(),\n      branch: {\n        branchNumber,\n        branchLabel,\n        branchName: clean(getField(item, 'vBranchName')),\n      },\n      address: {\n        houseNo: clean(getField(item, 'vHouseNumber')),\n        moo: clean(getField(item, 'vMooNumber')),\n        village: clean(getField(item, 'vVillageName')),\n        building: clean(getField(item, 'vBuildingName')),\n        floor: clean(getField(item, 'vFloorNumber')),\n        room: clean(getField(item, 'vRoomNumber')),\n        soi: clean(getField(item, 'vSoiName')),\n        street: clean(getField(item, 'vStreetName')),\n        subDistrict: clean(getField(item, 'vThambol')),\n        district: clean(getField(item, 'vAmphur')),\n        province: clean(getField(item, 'vProvince')),\n        postcode: clean(getField(item, 'vPostCode')),\n        yaek: clean(getField(item, 'vYaek')),\n      },\n      businessFirstDate: clean(getField(item, 'vBusinessFirstDate')),\n      errorMessage: errMsg,\n      success: Boolean(vatId && !errMsg),\n    },\n    pairedItem: { item: index },\n  });\n});\n\nreturn out;\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -171,11 +173,11 @@
           "conditions": [
             {
               "id": "c9d6ce2b-df45-41bd-9c7d-a6dee8461a89",
-              "leftValue": "={{ $json.errorMessage.anyType._ }}",
-              "rightValue": "is empty",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
               "operator": {
-                "type": "string",
-                "operation": "empty",
+                "type": "boolean",
+                "operation": "true",
                 "singleValue": true
               }
             }
